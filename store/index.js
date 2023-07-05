@@ -31,7 +31,6 @@ export default createStore({
     },
     actions: {
         async connectionWallet({state}) {
-            //  проверяем, что есть metamask и подключаем его
             if (typeof window.ethereum !== 'undefined') {
                 console.log("Etherium client installed!");
                 if (ethereum.isMetaMask === true) {
@@ -47,7 +46,7 @@ export default createStore({
             } else {
                 alert ("Ethereum client is not installed!")
             }
-            // подключаем аккаунт
+
             await ethereum.request({ method: "eth_requestAccounts" })
             .then(accounts => {
                 state.address = ethers.utils.getAddress(accounts[0]);
@@ -58,11 +57,10 @@ export default createStore({
                 }
                 console.log(`Account ${state.address} connected`);
             })
-            //создаем провайдера
+            
             state.provider = new ethers.providers.Web3Provider(ethereum);
-            // state.provider = ethers.getDefaultProvider(ethereum);
-            // console.log(state.provider);
-            // получаем параметры сети
+
+
             state.chainId = await window.ethereum.request({ method: "eth_chainId" });
             console.log("chainId: ", state.chainId);
 
@@ -76,10 +74,8 @@ export default createStore({
                 console.log(`Accounts changed to ${state.address}`);
             })
 
-            ethereum.on("chainChanged", async (chainId) => {
-                // создаем провайдера
+            ethereum.on("chainChanged", async () => {
                 state.provider = new ethers.providers.Web3Provider(ethereum);
-                // получаем параметры сети
                 state.chainId = await window.ethereum.request({ method: "eth_chainId" });
                 console.log("chainId changed to ", state.chainId);
             })
@@ -89,11 +85,7 @@ export default createStore({
             console.log(targetAddress);
             console.log(functionName);
             console.log(functionArgs);
-            // functionArgs = {
-            //     types: [],
-            //     args: []
-            // }
-            // собираем сигнатуру целевой функции
+
             let functionSignature = "function " + functionName + "(";
             for(let i = 0; i < functionArgs.types.length; i++) {
                 functionSignature += functionArgs.types[i] + ",";
@@ -101,46 +93,34 @@ export default createStore({
             functionSignature = functionSignature.slice(0, -1) + ")";
             console.log("functionSignature: ", functionSignature);
 
-            // собираем интерфейс целевого контракта
             const iTarget = new ethers.utils.Interface([functionSignature]);
             console.log("iTarget: ", iTarget);
 
-            // Собираем calldata
             const payload = iTarget.encodeFunctionData(functionName, functionArgs.args);
             console.log("payload: ", payload);
 
-            // Получаем nonce
-            // Для начала получаем провайдера и инстанс контракта
-            // const provider = ethers.getDefaultProvider(ethers.BigNumber.from(state.chainId).toNumber());
             state.multisig = new ethers.Contract(state.multisigAddress, multisigABI, jsprovider);
             const nonce = await state.multisig.nonce();
             console.log("nonce: ", nonce);
 
-            // Собираем сообщение
             const message = ethers.utils.arrayify(ethers.utils.solidityPack(
                 ["uint256", "address", "address", "bytes"],
                 [nonce, state.multisigAddress, targetAddress, payload]
             ));
-            // console.log("message: ", message);
-
-            // получаем подписанта
+     
             const signer = state.provider.getSigner();
             console.log("signer: ", signer);
 
-            // подписываем сообщение
             const rawSignature = await signer.signMessage(message);
 
-            // вытаскиваем саму подпись
             const signature = ethers.utils.splitSignature(rawSignature); 
 
-            // вытаскиваем v r s и добавляем в структуру с массивами
             let signatures = { 
                 v: [signature.v], 
                 r: [signature.r], 
                 s: [signature.s]
             };
             
-            // сохроняем параметры сообщения на подпись и сами подписи
             state.message = {
                 targetAddress: targetAddress,
                 functionName: functionName,
@@ -152,24 +132,19 @@ export default createStore({
                 signatures: signatures
             }
 
-            // говорим, что есть новое сообщение
             state.newMessage = true;
 
             console.log("state.message: ", state.message);
 
         },
         async signMessage({state}) {
-            // получаем подписанта
             const signer = state.provider.getSigner();
             console.log("signer: ", signer);
 
-            // подписываем сообщение
             const rawSignature = await signer.signMessage(state.message.message);
 
-            // вытаскиваем саму подпись
             const signature = ethers.utils.splitSignature(rawSignature); 
 
-            // добавляем подпись к уже имеющимся
             state.message.signatures.v.push(signature.v);
             state.message.signatures.r.push(signature.r);
             state.message.signatures.s.push(signature.s);
@@ -184,7 +159,6 @@ export default createStore({
         },
         async sendMessage({state}) {
             const iMultisig = new ethers.utils.Interface(multisigABI);
-            // собираем calldata для функции verify
             const data = iMultisig.encodeFunctionData("verify", 
             [
                 state.message.nonce,
@@ -194,7 +168,7 @@ export default createStore({
                 state.message.signatures.r,
                 state.message.signatures.s
             ]);
-            // отправляем транзакцию
+
             const txHash = await window.ethereum.request({
                 method: "eth_sendTransaction",
                 params: [{
@@ -205,8 +179,7 @@ export default createStore({
             })
             console.log("txHash: ", txHash);
 
-            // ждём квитанцию
-            // const provider = ethers.getDefaultProvider(ethers.BigNumber.from(state.chainId).toNumber())
+            
             const receipt = await jsprovider.waitForTransaction(txHash);
             console.log("receipt: ", receipt);
 
